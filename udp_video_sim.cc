@@ -13,16 +13,15 @@ int main(int argc, char *argv[]) {
   double videoRateMbps = 3.0;
   double bottleneckMbps = 5.0;
   uint32_t delayMs = 20;
-  double crossFlowMbps = 0.0;
 
   CommandLine cmd(__FILE__);
   cmd.AddValue("simTime", "Simuleringstid (sek)", simTime);
   cmd.AddValue("videoRateMbps", "Videobitrate (Mbit/s)", videoRateMbps);
   cmd.AddValue("bottleneckMbps", "Länkbandbredd (Mbit/s)", bottleneckMbps);
   cmd.AddValue("delayMs", "Fördröjning (ms)", delayMs);
-  cmd.AddValue("crossFlowMbps", "Bakgrundstrafikens styrka (Mbps)", crossFlowMbps);
   cmd.Parse(argc, argv);
 
+  Time::SetResolution(Time::NS);
   NodeContainer nodes;
   nodes.Create(2);
 
@@ -53,22 +52,6 @@ int main(int argc, char *argv[]) {
   clientApp.Start(Seconds(0.5));
   clientApp.Stop(Seconds(simTime));
 
-  if (crossFlowMbps > 0.0) {
-    std::cout << "Bakgrundstrafik aktiverad: " << crossFlowMbps << " Mbps" << std::endl;
-    OnOffHelper onoff("ns3::UdpSocketFactory", InetSocketAddress(interfaces.GetAddress(1), 5001));
-    onoff.SetAttribute("OnTime", StringValue("ns3::ConstantRandomVariable[Constant=1]"));
-    onoff.SetAttribute("OffTime", StringValue("ns3::ExponentialRandomVariable[Mean=0.2]"));
-    onoff.SetAttribute("PacketSize", UintegerValue(1000));
-    onoff.SetAttribute("DataRate", StringValue(std::to_string(crossFlowMbps) + "Mbps"));
-    ApplicationContainer crossApp = onoff.Install(nodes.Get(0));
-    crossApp.Start(Seconds(1.0));
-    crossApp.Stop(Seconds(simTime));
-    PacketSinkHelper sink("ns3::UdpSocketFactory", InetSocketAddress(interfaces.GetAddress(1), 5001));
-    ApplicationContainer sinkApp = sink.Install(nodes.Get(1));
-    sinkApp.Start(Seconds(0.5));
-    sinkApp.Stop(Seconds(simTime));
-  }
-
   FlowMonitorHelper flowmon;
   Ptr<FlowMonitor> monitor = flowmon.InstallAll();
 
@@ -81,18 +64,17 @@ int main(int argc, char *argv[]) {
 
   for (auto &flow : stats) {
     Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow(flow.first);
-    if (t.destinationPort == 4000) {
-      std::cout << "==== RESULTAT ====" << std::endl;
-      std::cout << "Källa: " << t.sourceAddress << "  -->  Mottagare: " << t.destinationAddress << std::endl;
-      std::cout << "Paket skickade: " << flow.second.txPackets << std::endl;
-      std::cout << "Paket mottagna: " << flow.second.rxPackets << std::endl;
-      std::cout << "Förlust (%): " << (100.0 * (flow.second.txPackets - flow.second.rxPackets) / flow.second.txPackets) << std::endl;
-      std::cout << "Medelfördröjning (ms): " << (flow.second.delaySum.GetSeconds() * 1000 / flow.second.rxPackets) << std::endl;
-      std::cout << "Genomsnittlig jitter (ms): " << (flow.second.jitterSum.GetSeconds() * 1000 / (flow.second.rxPackets - 1)) << std::endl;
-      std::cout << "===================" << std::endl;
-    }
+    std::cout << "==== RESULTAT ====" << std::endl;
+    std::cout << "Källa: " << t.sourceAddress << "  -->  Mottagare: " << t.destinationAddress << std::endl;
+    std::cout << "Paket skickade: " << flow.second.txPackets << std::endl;
+    std::cout << "Paket mottagna: " << flow.second.rxPackets << std::endl;
+    std::cout << "Förlust (%): " << (100.0 * (flow.second.txPackets - flow.second.rxPackets) / flow.second.txPackets) << std::endl;
+    std::cout << "Medelfördröjning (ms): " << (flow.second.delaySum.GetSeconds() * 1000 / flow.second.rxPackets) << std::endl;
+    std::cout << "Genomsnittlig jitter (ms): " << (flow.second.jitterSum.GetSeconds() * 1000 / (flow.second.rxPackets - 1)) << std::endl;
+    std::cout << "===================" << std::endl;
   }
 
   Simulator::Destroy();
   return 0;
 }
+
